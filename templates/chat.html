@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Chat Room</title>
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+</head>
+<body>
+    <h1>Chat Room: {{ room }}</h1>
+    <div id="chat-box" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px;">
+    </div>
+    <input id="message-input" type="text" placeholder="Type your message...">
+    <button id="send-button">Send</button>
+    <button id="leave-button">Leave Chat</button>
+
+    <script>
+        const socket = io();
+
+        const username = "{{ username }}";
+        const room = "{{ room }}";
+        let userColor = null; // Store user-specific color
+
+        // Join the room
+        socket.emit('join', { username, room });
+
+        // Handle incoming messages
+        socket.on('message', (data) => {
+            const chatBox = document.getElementById('chat-box');
+            const messageElement = document.createElement('div');
+
+            // Style the message
+            const usernameElement = document.createElement('span');
+            usernameElement.textContent = data.username + ": ";
+            usernameElement.style.fontWeight = 'bold';
+            usernameElement.style.color = data.color;
+
+            const textElement = document.createElement('span');
+            textElement.textContent = data.text;
+
+            messageElement.appendChild(usernameElement);
+            messageElement.appendChild(textElement);
+            messageElement.style.marginBottom = '5px'; // Add spacing between messages
+            chatBox.appendChild(messageElement);
+
+            // Auto-scroll to the bottom of the chat box
+            chatBox.scrollTop = chatBox.scrollHeight;
+        });
+
+        // Capture assigned color from server
+        // Capture assigned color from server
+        socket.on('user_color', (color) => {
+            userColor = color; // Store the color
+            console.log("Assigned user color:", userColor); // Debugging to verify color consistency
+        });
+
+        // Handle re-join on tab switch or reload
+        let isTabActive = true;
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                isTabActive = false;
+                socket.emit('leave', { username, room });
+            } else if (document.visibilityState === 'visible' && !isTabActive) {
+                isTabActive = true;
+                socket.emit('join', { username, room });
+            }
+        });
+
+        // Handle errors for duplicate usernames
+        socket.on('user_error', (data) => {
+            alert(data.message);
+            window.location.href = '/';
+        });
+
+        // Send messages
+        document.getElementById('send-button').addEventListener('click', () => {
+            const message = document.getElementById('message-input').value;
+            if (message.trim() !== "") { // Prevent empty messages
+                socket.emit('send_message', { username, room, message, color: userColor });
+                document.getElementById('message-input').value = '';
+            }
+        });
+
+        // Leave the room when the "Leave Chat" button is clicked
+        document.getElementById('leave-button').addEventListener('click', () => {
+            socket.emit('leave', { username, room });
+            window.location.href = '/';
+        });
+
+        // Leave the room when the page is closed
+        const leaveRoom = () => {
+            if (socket.connected) {
+                socket.emit('leave', { username, room });
+                socket.disconnect();
+            }
+        };
+
+        window.addEventListener('beforeunload', leaveRoom);
+        window.addEventListener('unload', leaveRoom);
+
+    </script>
+</body>
+</html>
