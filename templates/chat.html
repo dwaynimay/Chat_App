@@ -8,7 +8,11 @@
 </head>
 <body>
     <h1>Chat Room: {{ room }}</h1>
-    <div id="chat-box" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px;">
+    <div style="display: flex;">
+        <div id="chat-box" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; flex: 1;">
+        </div>
+        <div id="encryption-box" style="border: 1px solid #ccc; height: 300px; overflow-y: scroll; padding: 10px; flex: 1; margin-left: 10px;">
+        </div>
     </div>
     <input id="message-input" type="text" placeholder="Type your message...">
     <button id="send-button">Send</button>
@@ -27,7 +31,10 @@
         // Handle incoming messages
         socket.on('message', (data) => {
             const chatBox = document.getElementById('chat-box');
+            const encryptionBox = document.getElementById('encryption-box');
+
             const messageElement = document.createElement('div');
+            const encryptionElement = document.createElement('div');
 
             // Style the message
             const usernameElement = document.createElement('span');
@@ -43,28 +50,26 @@
             messageElement.style.marginBottom = '5px'; // Add spacing between messages
             chatBox.appendChild(messageElement);
 
-            // Auto-scroll to the bottom of the chat box
+            // Display encryption output if it exists
+            if (data.encrypted && Array.isArray(data.encrypted)) {
+                data.encrypted.forEach(step => {
+                    const stepElement = document.createElement('div');
+                    stepElement.textContent = step;
+                    encryptionElement.appendChild(stepElement);
+                });
+                encryptionElement.style.marginBottom = '5px';
+                encryptionBox.appendChild(encryptionElement);
+            }
+
+            // Auto-scroll to the bottom of the chat box and encryption box
             chatBox.scrollTop = chatBox.scrollHeight;
+            encryptionBox.scrollTop = encryptionBox.scrollHeight;
         });
 
-        // Capture assigned color from server
         // Capture assigned color from server
         socket.on('user_color', (color) => {
             userColor = color; // Store the color
             console.log("Assigned user color:", userColor); // Debugging to verify color consistency
-        });
-
-        // Handle re-join on tab switch or reload
-        let isTabActive = true;
-
-        document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'hidden') {
-                isTabActive = false;
-                socket.emit('leave', { username, room });
-            } else if (document.visibilityState === 'visible' && !isTabActive) {
-                isTabActive = true;
-                socket.emit('join', { username, room });
-            }
         });
 
         // Handle errors for duplicate usernames
@@ -99,6 +104,18 @@
         window.addEventListener('beforeunload', leaveRoom);
         window.addEventListener('unload', leaveRoom);
 
+        // Enhanced handling for tab switching and window focus
+        let isTabActive = true;
+
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') {
+                isTabActive = false;
+                socket.emit('leave', { username, room });
+            } else if (document.visibilityState === 'visible' && !isTabActive) {
+                isTabActive = true;
+                socket.emit('join', { username, room });
+            }
+        });
     </script>
 </body>
 </html>

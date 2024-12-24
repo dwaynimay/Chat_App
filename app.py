@@ -1,14 +1,33 @@
 from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, join_room, leave_room, emit
-from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives import padding
+from cryptography.hazmat.backends import default_backend
+import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey!'
 socketio = SocketIO(app)
 
-# Generate encryption key
-encryption_key = Fernet.generate_key()
-cipher = Fernet(encryption_key)
+# Generate AES encryption key and IV
+encryption_key = os.urandom(32)  # 256-bit key
+encryption_iv = os.urandom(16)  # 128-bit IV
+
+def encrypt_aes(data):
+    padder = padding.PKCS7(algorithms.AES.block_size).padder()
+    padded_data = padder.update(data.encode()) + padder.finalize()
+    cipher = Cipher(algorithms.AES(encryption_key), modes.CBC(encryption_iv), backend=default_backend())
+    encryptor = cipher.encryptor()
+    encrypted_data = encryptor.update(padded_data) + encryptor.finalize()
+    return encrypted_data
+
+def decrypt_aes(encrypted_data):
+    cipher = Cipher(algorithms.AES(encryption_key), modes.CBC(encryption_iv), backend=default_backend())
+    decryptor = cipher.decryptor()
+    padded_data = decryptor.update(encrypted_data) + decryptor.finalize()
+    unpadder = padding.PKCS7(algorithms.AES.block_size).unpadder()
+    data = unpadder.update(padded_data) + unpadder.finalize()
+    return data.decode()
 
 connected_users = {}  # Store username and room mapping
 registered_users = set()  # To track unique usernames
@@ -69,8 +88,6 @@ def on_join(data):
         "text": "has entered the room."
     }, to=room)
 
-
-
 @socketio.on('leave')
 def on_leave(data):
     username = data['username']
@@ -104,10 +121,23 @@ def handle_message(data):
     room = data['room']
     message = data['message']
     color = user_colors.get(username, "#000000")  # Default to black if no color assigned
+
+    # Encrypt message
+    encrypted_message = encrypt_aes(message)
+    decrypt_message = decrypt_aes(encrypted_message)
+
+    # Emit message and encrypted steps
+    steps = [
+        f"Original: {message}",
+        f"Padded: {padding.PKCS7(algorithms.AES.block_size).padder().update(message.encode()).hex()}",
+        f"Encrypted (hex): {encrypted_message.hex()}",
+        f"Decrypted: {decrypt_message}"
+    ]
     emit('message', {
         "username": username,
         "color": color,
-        "text": message
+        "text": message,
+        "encrypted": steps
     }, to=room)
 
 if __name__ == '__main__':
